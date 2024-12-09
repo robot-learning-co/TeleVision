@@ -19,8 +19,8 @@ crop_size_w = 1
 crop_size_h = 0
 resolution_cropped = (resolution[0] - crop_size_h, resolution[1] - 2 * crop_size_w)
 
-agent = DynamixelAgent(port="/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8IT033-if00-port0")
-agent._robot.set_torque_mode(True)
+#agent = DynamixelAgent(port="/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8IT033-if00-port0")
+#agent._robot.set_torque_mode(True)
 
 # Create a Camera object
 zed = sl.Camera()
@@ -48,7 +48,7 @@ shm = shared_memory.SharedMemory(create=True, size=np.prod(img_shape) * np.uint8
 img_array = np.ndarray((img_shape[0], img_shape[1], 3), dtype=np.uint8, buffer=shm.buf)
 image_queue = Queue()
 toggle_streaming = Event()
-tv = OpenTeleVision(resolution_cropped, shm.name, image_queue, toggle_streaming)
+tv = OpenTeleVision(resolution_cropped, shm.name, image_queue, toggle_streaming, ngrok=True)
 
 while True:
     start = time.time()
@@ -61,7 +61,7 @@ while True:
         ypr = rotations.euler_from_quaternion(head_rot, 2, 1, 0, False)
         # print(ypr)
         # agent._robot.command_joint_state([0., 0.4])
-        agent._robot.command_joint_state(ypr[:2])
+        # agent._robot.command_joint_state(ypr[:2])
         # print("success")
     except:
         # print("failed")
@@ -72,13 +72,18 @@ while True:
         zed.retrieve_image(image_left, sl.VIEW.LEFT)
         zed.retrieve_image(image_right, sl.VIEW.RIGHT)
         timestamp = zed.get_timestamp(sl.TIME_REFERENCE.CURRENT)  # Get the timestamp at the time the image was captured
-        # print("Image resolution: {0} x {1} || Image timestamp: {2}\n".format(image.get_width(), image.get_height(),
+        # print("Image resolution: {0} x {1} || Image timestamp: {2}\n".format(image_left.get_width(), image_left.get_height(),
         #         timestamp.get_milliseconds()))
+
 
     bgr = np.hstack((image_left.numpy()[crop_size_h:, crop_size_w:-crop_size_w],
                      image_right.numpy()[crop_size_h:, crop_size_w:-crop_size_w]))
-    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)
-
+    # print(type(bgr))
+    # rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)
+    
+    # print(bgr.shape)
+    rgb = bgr[:,:,:3]
+    
     np.copyto(img_array, rgb)
 
     end = time.time()
