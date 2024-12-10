@@ -1,3 +1,14 @@
+# TRLC's Notes
+## Setup
+```
+conda create -y -n trlc3.10 python=3.10 && conda activate trlc3.10
+pip install -r requirements.txt
+pip uninstall opencv-python && conda install -c conda-forge "opencv>=4.10.0"
+```
+[Create a locally-managed tunnel (CLI)](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-local-tunnel/)
+
+
+
 <h1 align="center"><img src="img/logo.png" width="40"> Open-TeleVision: Teleoperation with
 
 Immersive Active Visual Feedback</h1>
