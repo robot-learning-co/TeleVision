@@ -3,6 +3,11 @@ aiortc
 matplotlib
 scipy
 pytransform3d
+dynamixel_sdk
+
+#######################################################################################################################
+# conda install -c conda-forge ffmpeg && pip uninstall opencv-python && conda install -c conda-forge "opencv>=4.10.0" #
+#######################################################################################################################
 
 ##################################################
 # cd /usr/local/zed/ && python get_python_api.py #
