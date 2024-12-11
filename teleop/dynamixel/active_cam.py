@@ -44,11 +44,11 @@ class DynamixelRobotConfig:
 # Can put multi robot into the dic, note that the calibration info shoule be put here
 PORT_CONFIG_MAP: Dict[str, DynamixelRobotConfig] = {
     #! for camera mounta
-    "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8IT033-if00-port0": DynamixelRobotConfig(
+    "/dev/ttyACM0": DynamixelRobotConfig(
         joint_ids=(1, 2),
         joint_offsets=(
-            2*np.pi/2, 
-            2*np.pi/2, 
+            np.pi,
+            1.5*np.pi, 
         ),
         joint_signs=(-1, -1),
         gripper_config=None,
