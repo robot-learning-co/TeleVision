@@ -8,12 +8,12 @@ import asyncio
 from webrtc.zed_server import *
 
 class OpenTeleVision:
-    def __init__(self, img_shape, shm_name, queue, toggle_streaming, stream_mode="image", cert_file="./cert.pem", key_file="./key.pem", ngrok=False):
+    def __init__(self, img_shape, shm_name, queue, toggle_streaming, stream_mode="image", cert_file="./cert.pem", key_file="./key.pem", tunnel=False):
         # self.app=Vuer()
         self.img_shape = (img_shape[0], 2*img_shape[1], 3)
         self.img_height, self.img_width = img_shape[:2]
 
-        if ngrok:
+        if tunnel:
             self.app = Vuer(host='0.0.0.0', queries=dict(grid=False), queue_len=3)
         else:
             self.app = Vuer(host='0.0.0.0', cert=cert_file, key=key_file, queries=dict(grid=False), queue_len=3)
@@ -29,13 +29,17 @@ class OpenTeleVision:
         else:
             raise ValueError("stream_mode must be either 'webrtc' or 'image'")
 
-        self.left_hand_shared = Array('d', 16, lock=True)
-        self.right_hand_shared = Array('d', 16, lock=True)
-        self.left_landmarks_shared = Array('d', 75, lock=True)
-        self.right_landmarks_shared = Array('d', 75, lock=True)
+        # self.left_hand_shared = Array('d', 16, lock=True)
+        # self.right_hand_shared = Array('d', 16, lock=True)
+        self.left_landmarks_shared = Array('d', 400, lock=True) # 75
+        self.right_landmarks_shared = Array('d', 400, lock=True)
+        
+        self.left_state_shared = Array('d', 3, lock=True)
+        self.right_state_shared = Array('d', 3, lock=True)
         
         self.head_matrix_shared = Array('d', 16, lock=True)
         self.aspect_shared = Value('d', 1.0, lock=True)
+        
         if stream_mode == "webrtc":
             # webrtc server
             if Args.verbose:
@@ -96,21 +100,26 @@ class OpenTeleVision:
 
     async def on_hand_move(self, event, session, fps=60):
         try:
-            # with self.left_hand_shared.get_lock():  # Use the lock to ensure thread-safe updates
-            #     self.left_hand_shared[:] = event.value["leftHand"]
-            # with self.right_hand_shared.get_lock():
-            #     self.right_hand_shared[:] = event.value["rightHand"]
-            # with self.left_landmarks_shared.get_lock():
-            #     self.left_landmarks_shared[:] = np.array(event.value["leftLandmarks"]).flatten()
-            # with self.right_landmarks_shared.get_lock():
-            #     self.right_landmarks_shared[:] = np.array(event.value["rightLandmarks"]).flatten()
-            self.left_hand_shared[:] = event.value["leftHand"]
-            self.right_hand_shared[:] = event.value["rightHand"]
-            self.left_landmarks_shared[:] = np.array(event.value["leftLandmarks"]).flatten()
-            self.right_landmarks_shared[:] = np.array(event.value["rightLandmarks"]).flatten()
-        except: 
-            pass
-    
+            self.left_landmarks_shared[:] = np.array(event.value["left"]).flatten()
+            self.right_landmarks_shared[:] = np.array(event.value["right"]).flatten()
+        except:
+            pass 
+        
+        try:
+            self.left_state_shared[:] = np.array([
+                int(event.value["leftState"]["pinch"]),
+                int(event.value["leftState"]["squeeze"]),
+                int(event.value["leftState"]["tap"])
+                ]).flatten()
+            
+            self.right_state_shared[:] = np.array([
+                int(event.value["rightState"]["pinch"]),
+                int(event.value["rightState"]["squeeze"]),
+                int(event.value["rightState"]["tap"])
+                ]).flatten()
+        except:
+            pass 
+                
     async def main_webrtc(self, session, fps=60):
         session.set @ DefaultScene(frameloop="always")
         session.upsert @ Hands(fps=fps, stream=True, key="hands", showLeft=False, showRight=False)
@@ -126,31 +135,9 @@ class OpenTeleVision:
             await asyncio.sleep(1)
     
     async def main_image(self, session, fps=60):
-        session.upsert @ Hands(fps=fps, stream=True, key="hands", showLeft=False, showRight=False)
-        end_time = time.time()
+        session.upsert @ Hands(fps=fps, stream=True, key="hands", showLeft=True, showRight=True)
         while True:
-            start = time.time()
-            # print(end_time - start)
-            # aspect = self.aspect_shared.value
             display_image = self.img_array
-
-            # session.upsert(
-            # ImageBackground(
-            #     # Can scale the images down.
-            #     display_image[:self.img_height],
-            #     # 'jpg' encoding is significantly faster than 'png'.
-            #     format="jpeg",
-            #     quality=80,
-            #     key="left-image",
-            #     interpolate=True,
-            #     # fixed=True,
-            #     aspect=1.778,
-            #     distanceToCamera=2,
-            #     position=[0, -0.5, -2],
-            #     rotation=[0, 0, 0],
-            # ),
-            # to="bgChildren",
-            # )
 
             session.upsert(
             [ImageBackground(
@@ -195,31 +182,41 @@ class OpenTeleVision:
             end_time = time.time()
             await asyncio.sleep(0.03)
 
-    @property
-    def left_hand(self):
-        # with self.left_hand_shared.get_lock():
-        #     return np.array(self.left_hand_shared[:]).reshape(4, 4, order="F")
-        return np.array(self.left_hand_shared[:]).reshape(4, 4, order="F")
+    # @property
+    # def left_hand(self):
+    #     # with self.left_hand_shared.get_lock():
+    #     #     return np.array(self.left_hand_shared[:]).reshape(4, 4, order="F")
+    #     return np.array(self.left_hand_shared[:]).reshape(4, 4, order="F")
         
     
-    @property
-    def right_hand(self):
-        # with self.right_hand_shared.get_lock():
-        #     return np.array(self.right_hand_shared[:]).reshape(4, 4, order="F")
-        return np.array(self.right_hand_shared[:]).reshape(4, 4, order="F")
+    # @property
+    # def right_hand(self):
+    #     # with self.right_hand_shared.get_lock():
+    #     #     return np.array(self.right_hand_shared[:]).reshape(4, 4, order="F")
+    #     return np.array(self.right_hand_shared[:]).reshape(4, 4, order="F")
         
     
     @property
     def left_landmarks(self):
         # with self.left_landmarks_shared.get_lock():
         #     return np.array(self.left_landmarks_shared[:]).reshape(25, 3)
-        return np.array(self.left_landmarks_shared[:]).reshape(25, 3)
+        # return np.array(self.left_landmarks_shared[:]).reshape(25, 3)
+        return np.array(self.left_landmarks_shared[:]).reshape(25, 4, 4)
     
     @property
     def right_landmarks(self):
         # with self.right_landmarks_shared.get_lock():
             # return np.array(self.right_landmarks_shared[:]).reshape(25, 3)
-        return np.array(self.right_landmarks_shared[:]).reshape(25, 3)
+        return np.array(self.right_landmarks_shared[:]).reshape(25, 4, 4)
+        # return np.array(self.right_landmarks_shared[:]).reshape(25, 3)
+        
+    @property
+    def left_state(self):
+        return np.array(self.left_state_shared[:])
+    
+    @property
+    def right_state(self):
+        return np.array(self.right_state_shared[:])
 
     @property
     def head_matrix(self):
