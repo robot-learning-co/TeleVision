@@ -19,8 +19,8 @@ crop_size_w = 1
 crop_size_h = 0
 resolution_cropped = (resolution[0] - crop_size_h, resolution[1] - 2 * crop_size_w)
 
-#agent = DynamixelAgent(port="/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FT8IT033-if00-port0")
-#agent._robot.set_torque_mode(True)
+agent = DynamixelAgent(port="/dev/ttyACM0")
+agent._robot.set_torque_mode(True)
 
 # Create a Camera object
 zed = sl.Camera()
@@ -60,8 +60,8 @@ while True:
     try:
         ypr = rotations.euler_from_quaternion(head_rot, 2, 1, 0, False)
         # print(ypr)
-        # agent._robot.command_joint_state([0., 0.4])
-        # agent._robot.command_joint_state(ypr[:2])
+        agent._robot.command_joint_state([0., 0.4])
+        agent._robot.command_joint_state(ypr[:2])
         # print("success")
     except:
         # print("failed")
