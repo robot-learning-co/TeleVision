@@ -61,8 +61,6 @@ bot = InterbotixManipulatorXS(
         robot_model='vx300s',
         group_name='arm',
         gripper_name='gripper',
-        # moving_time=1.,
-        # accel_time=1.
     )
 robot_startup()
 bot.gripper.release() 
@@ -76,12 +74,12 @@ while True:
     if np.sum(head_mat) == 0:
         head_mat = np.eye(3)
     head_rot = rotations.quaternion_from_matrix(head_mat[0:3, 0:3])
-    # try:
-    #     ypr = rotations.euler_from_quaternion(head_rot, 2, 1, 0, False)
-    #     agent._robot.command_joint_state([0., 0.])
-    #     agent._robot.command_joint_state(ypr[:2])
-    # except:
-    #     pass
+    try:
+        ypr = rotations.euler_from_quaternion(head_rot, 2, 1, 0, False)
+        agent._robot.command_joint_state([0., 0.])
+        agent._robot.command_joint_state(ypr[:2])
+    except:
+        pass
     
     # HANDS
     left_wrist = grd_yup2grd_zup @ tv.left_wrist @ fast_mat_inv(grd_yup2grd_zup)
@@ -93,8 +91,10 @@ while True:
     # Track pinch start positions and movements
     if left_state[0] and not hasattr(tv, 'left_pinch_start'):
         tv.left_pinch_start = left_wrist.copy()
+        bot.gripper.grasp()  # Close gripper when left pinch starts
     elif not left_state[0] and hasattr(tv, 'left_pinch_start'):
         delattr(tv, 'left_pinch_start')
+        bot.gripper.release()  # Open gripper when left pinch ends
     
     if right_state[0] and not hasattr(tv, 'right_pinch_start'):
         tv.right_pinch_start = right_wrist.copy()
@@ -114,7 +114,7 @@ while True:
         if hasattr(tv, 'start_ee_pose'):
             # Create new pose by adding relative movement to initial pose
             new_pose = tv.start_ee_pose.copy()
-            new_pose += rel_movement 
+            new_pose[:3,3] += rel_movement[:3,3]
             bot.arm.set_ee_pose_matrix(
                 new_pose, 
                 moving_time=0.3,
@@ -122,27 +122,6 @@ while True:
                 blocking=False)
         print(f"Right hand relative movement: {rel_movement[:3,3]}")
     
-    # if right_state[0] and hasattr(tv, 'right_pinch_start'):
-    #     rel_movement = right_wrist - tv.right_pinch_start
-    #     if hasattr(tv, 'start_ee_pose'):
-    #         # Apply exponential smoothing to relative movement
-    #         if not hasattr(tv, 'smoothed_movement'):
-    #             tv.smoothed_movement = rel_movement[:3,3]
-    #         else:
-    #             alpha = 0.4  # Smoothing factor (0-1), lower = more smoothing
-    #             tv.smoothed_movement = alpha * rel_movement[:3,3] + (1-alpha) * tv.smoothed_movement
-            
-    #         # Create new pose by adding smoothed movement to initial pose
-    #         new_pose = tv.start_ee_pose.copy()
-    #         new_pose[:3, 3] += tv.smoothed_movement  # Add smoothed translation
-    #         bot.arm.set_ee_pose_matrix(
-    #             new_pose,
-    #             moving_time=0.3, 
-    #             accel_time=0.1,
-    #             blocking=False)
-    #     print(f"Right hand relative movement: {rel_movement[:3,3]}")
-    # elif not right_state[0] and hasattr(tv, 'smoothed_movement'):
-    #     delattr(tv, 'smoothed_movement')  # Reset smoothing when pinch ends
 
 
     if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
