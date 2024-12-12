@@ -31,8 +31,8 @@ class OpenTeleVision:
 
         # self.left_hand_shared = Array('d', 16, lock=True)
         # self.right_hand_shared = Array('d', 16, lock=True)
-        self.left_landmarks_shared = Array('d', 400, lock=True) # 75
-        self.right_landmarks_shared = Array('d', 400, lock=True)
+        self.left_landmarks_shared = Array('d', 16, lock=True) # 75
+        self.right_landmarks_shared = Array('d', 16, lock=True)
         
         self.left_state_shared = Array('d', 3, lock=True)
         self.right_state_shared = Array('d', 3, lock=True)
@@ -100,8 +100,8 @@ class OpenTeleVision:
 
     async def on_hand_move(self, event, session, fps=60):
         try:
-            self.left_landmarks_shared[:] = np.array(event.value["left"]).flatten()
-            self.right_landmarks_shared[:] = np.array(event.value["right"]).flatten()
+            self.left_landmarks_shared[:] = np.array(event.value["left"][:16]).flatten()
+            self.right_landmarks_shared[:] = np.array(event.value["right"][:16]).flatten()
         except:
             pass 
         
@@ -138,47 +138,46 @@ class OpenTeleVision:
         session.upsert @ Hands(fps=fps, stream=True, key="hands", showLeft=True, showRight=True)
         while True:
             display_image = self.img_array
-
-            session.upsert(
-            [ImageBackground(
-                # Can scale the images down.
-                display_image[::2, :self.img_width],
-                # display_image[:self.img_height:2, ::2],
-                # 'jpg' encoding is significantly faster than 'png'.
-                format="jpeg",
-                quality=80,
-                key="left-image",
-                interpolate=True,
-                # fixed=True,
-                aspect=1.66667,
-                # distanceToCamera=0.5,
-                height = 8,
-                position=[0, -1, 3],
-                # rotation=[0, 0, 0],
-                layers=1, 
-                alphaSrc="./vinette.jpg"
-            ),
-            ImageBackground(
-                # Can scale the images down.
-                display_image[::2, self.img_width:],
-                # display_image[self.img_height::2, ::2],
-                # 'jpg' encoding is significantly faster than 'png'.
-                format="jpeg",
-                quality=80,
-                key="right-image",
-                interpolate=True,
-                # fixed=True,
-                aspect=1.66667,
-                # distanceToCamera=0.5,
-                height = 8,
-                position=[0, -1, 3],
-                # rotation=[0, 0, 0],
-                layers=2, 
-                alphaSrc="./vinette.jpg"
-            )],
-            to="bgChildren",
-            )
-            # rest_time = 1/fps - time.time() + start
+            
+            # session.upsert(
+            # [ImageBackground(
+            #     # Can scale the images down.
+            #     display_image[::2, :self.img_width],
+            #     # display_image[:self.img_height:2, ::2],
+            #     # 'jpg' encoding is significantly faster than 'png'.
+            #     format="jpeg",
+            #     quality=80,
+            #     key="left-image",
+            #     interpolate=True,
+            #     # fixed=True,
+            #     aspect=1.66667,
+            #     # distanceToCamera=0.5,
+            #     height = 8,
+            #     position=[0, -1, 3],
+            #     # rotation=[0, 0, 0],
+            #     layers=1, 
+            #     alphaSrc="./vinette.jpg"
+            # ),
+            # ImageBackground(
+            #     # Can scale the images down.
+            #     display_image[::2, self.img_width:],
+            #     # display_image[self.img_height::2, ::2],
+            #     # 'jpg' encoding is significantly faster than 'png'.
+            #     format="jpeg",
+            #     quality=80,
+            #     key="right-image",
+            #     interpolate=True,
+            #     # fixed=True,
+            #     aspect=1.66667,
+            #     # distanceToCamera=0.5,
+            #     height = 8,
+            #     position=[0, -1, 3],
+            #     # rotation=[0, 0, 0],
+            #     layers=2, 
+            #     alphaSrc="./vinette.jpg"
+            # )],
+            # to="bgChildren",
+            # )
             end_time = time.time()
             await asyncio.sleep(0.03)
 
@@ -197,18 +196,12 @@ class OpenTeleVision:
         
     
     @property
-    def left_landmarks(self):
-        # with self.left_landmarks_shared.get_lock():
-        #     return np.array(self.left_landmarks_shared[:]).reshape(25, 3)
-        # return np.array(self.left_landmarks_shared[:]).reshape(25, 3)
-        return np.array(self.left_landmarks_shared[:]).reshape(25, 4, 4)
+    def left_wrist(self):
+        return np.array(self.left_landmarks_shared[:]).reshape(4, 4, order="F")
     
     @property
-    def right_landmarks(self):
-        # with self.right_landmarks_shared.get_lock():
-            # return np.array(self.right_landmarks_shared[:]).reshape(25, 3)
-        return np.array(self.right_landmarks_shared[:]).reshape(25, 4, 4)
-        # return np.array(self.right_landmarks_shared[:]).reshape(25, 3)
+    def right_wrist(self):
+        return np.array(self.right_landmarks_shared[:]).reshape(4, 4, order="F")
         
     @property
     def left_state(self):

@@ -16,6 +16,9 @@ from dynamixel.active_cam import DynamixelAgent
 from multiprocessing import Array, Process, shared_memory, Queue, Manager, Event, Semaphore
 from motion_utils import fast_mat_inv
 
+from interbotix_common_modules.common_robot.robot import robot_shutdown, robot_startup
+from interbotix_xs_modules.xs_robot.arm import InterbotixManipulatorXS
+
 
 resolution = (720, 1280)
 crop_size_w = 1
@@ -53,68 +56,94 @@ image_queue = Queue()
 toggle_streaming = Event()
 tv = OpenTeleVision(resolution_cropped, shm.name, image_queue, toggle_streaming, tunnel=True)
 
-# processor = VuerPreprocessor()
+
+bot = InterbotixManipulatorXS(
+        robot_model='vx300s',
+        group_name='arm',
+        gripper_name='gripper',
+        # moving_time=1.,
+        # accel_time=1.
+    )
+robot_startup()
+bot.gripper.release() 
+bot.arm.go_to_home_pose(moving_time=2.0, accel_time=0.3)
 
 while True:
     start = time.time()
     
-    # head_mat, left_wrist_mat, right_wrist_mat, left_hand_mat, right_hand_mat = processor.process(tv)
-
     # HEAD
     head_mat = grd_yup2grd_zup[:3, :3] @ tv.head_matrix[:3, :3] @ grd_yup2grd_zup[:3, :3].T
     if np.sum(head_mat) == 0:
         head_mat = np.eye(3)
     head_rot = rotations.quaternion_from_matrix(head_mat[0:3, 0:3])
+    # try:
+    #     ypr = rotations.euler_from_quaternion(head_rot, 2, 1, 0, False)
+    #     agent._robot.command_joint_state([0., 0.])
+    #     agent._robot.command_joint_state(ypr[:2])
+    # except:
+    #     pass
     
     # HANDS
-    left_handmarks = tv.left_landmarks
-    right_handmarks = tv.right_landmarks
+    left_wrist = grd_yup2grd_zup @ tv.left_wrist @ fast_mat_inv(grd_yup2grd_zup)
+    right_wrist = grd_yup2grd_zup @ tv.right_wrist @ fast_mat_inv(grd_yup2grd_zup)
+
     left_state = tv.left_state
     right_state = tv.right_state
 
     # Track pinch start positions and movements
     if left_state[0] and not hasattr(tv, 'left_pinch_start'):
-        # Record initial position when pinch starts
-        tv.left_pinch_start = left_handmarks[0].copy()
-        print("Left pinch started")
+        tv.left_pinch_start = left_wrist.copy()
     elif not left_state[0] and hasattr(tv, 'left_pinch_start'):
-        # Clear pinch start position when pinch ends
         delattr(tv, 'left_pinch_start')
-        print("Left pinch ended")
     
     if right_state[0] and not hasattr(tv, 'right_pinch_start'):
-        # Record initial position when pinch starts 
-        tv.right_pinch_start = right_handmarks[0].copy()
-        print("Right pinch started")
+        tv.right_pinch_start = right_wrist.copy()
+        tv.start_ee_pose = bot.arm.get_ee_pose().copy()  # Store initial pose when pinch starts
     elif not right_state[0] and hasattr(tv, 'right_pinch_start'):
-        # Clear pinch start position when pinch ends
         delattr(tv, 'right_pinch_start')
-        print("Right pinch ended")
+        if hasattr(tv, 'start_ee_pose'):
+            delattr(tv, 'start_ee_pose')
 
     # Print relative movements during pinch
     if left_state[0] and hasattr(tv, 'left_pinch_start'):
-        rel_movement = left_handmarks[0] - tv.left_pinch_start
-        print(f"Left hand relative movement: {rel_movement[3,:3]}")
+        rel_movement = left_wrist - tv.left_pinch_start
+        print(f"Left hand relative movement: {rel_movement[:3,3]}")
         
     if right_state[0] and hasattr(tv, 'right_pinch_start'):
-        rel_movement = right_handmarks[0] - tv.right_pinch_start
-        print(f"Right hand relative movement: {rel_movement[3,:3]}")
+        rel_movement = right_wrist - tv.right_pinch_start
+        if hasattr(tv, 'start_ee_pose'):
+            # Create new pose by adding relative movement to initial pose
+            new_pose = tv.start_ee_pose.copy()
+            new_pose += rel_movement 
+            bot.arm.set_ee_pose_matrix(
+                new_pose, 
+                moving_time=0.3,
+                accel_time=0.1,
+                blocking=False)
+        print(f"Right hand relative movement: {rel_movement[:3,3]}")
     
-    # # if pinch
-    # if left_state[0]:
-    #     left_hand_mat = grd_yup2grd_zup @ left_handmarks[0] @ fast_mat_inv(grd_yup2grd_zup)
-    #     # left_hand_mat = grd_yup2grd_zup[:3, :3] @ left_handmarks[0][:3, :3] @ grd_yup2grd_zup[:3, :3].T
-    #     print(left_hand_mat[3,:3])    
-    #     # z_up, y_left, x_in
+    # if right_state[0] and hasattr(tv, 'right_pinch_start'):
+    #     rel_movement = right_wrist - tv.right_pinch_start
+    #     if hasattr(tv, 'start_ee_pose'):
+    #         # Apply exponential smoothing to relative movement
+    #         if not hasattr(tv, 'smoothed_movement'):
+    #             tv.smoothed_movement = rel_movement[:3,3]
+    #         else:
+    #             alpha = 0.4  # Smoothing factor (0-1), lower = more smoothing
+    #             tv.smoothed_movement = alpha * rel_movement[:3,3] + (1-alpha) * tv.smoothed_movement
+            
+    #         # Create new pose by adding smoothed movement to initial pose
+    #         new_pose = tv.start_ee_pose.copy()
+    #         new_pose[:3, 3] += tv.smoothed_movement  # Add smoothed translation
+    #         bot.arm.set_ee_pose_matrix(
+    #             new_pose,
+    #             moving_time=0.3, 
+    #             accel_time=0.1,
+    #             blocking=False)
+    #     print(f"Right hand relative movement: {rel_movement[:3,3]}")
+    # elif not right_state[0] and hasattr(tv, 'smoothed_movement'):
+    #     delattr(tv, 'smoothed_movement')  # Reset smoothing when pinch ends
 
-
-    # try:
-    #     ypr = rotations.euler_from_quaternion(head_rot, 2, 1, 0, False)
-    #     # print(ypr[:2])
-    #     agent._robot.command_joint_state([0., 0.])
-    #     agent._robot.command_joint_state(ypr[:2])
-    # except:
-    #     pass
 
     if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
         zed.retrieve_image(image_left, sl.VIEW.LEFT)
@@ -124,9 +153,7 @@ while True:
 
     bgr = np.hstack((image_left.numpy()[crop_size_h:, crop_size_w:-crop_size_w],
                      image_right.numpy()[crop_size_h:, crop_size_w:-crop_size_w]))
-    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)
-    # rgb = bgr[:,:,:3]
-    
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)    
     np.copyto(img_array, rgb)
 
     end = time.time()
